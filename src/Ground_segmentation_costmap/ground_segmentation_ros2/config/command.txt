@@ -1,0 +1,31 @@
+ros2 launch ground_segmentation_ros2 ground_segmentation.launch.py \
+  pointcloud_topic:=/camera/camera/depth/color/points \
+  use_sim_time:=true
+
+ros2 launch ground_segmentation_ros2 ground_segmentation.launch.py \
+  pointcloud_topic:=/camera/camera/depth/color/points \
+  use_sim_time:=true
+ros2 run tf2_ros static_transform_publisher \
+  --x 0 --y 0 --z 0 \
+  --roll 0 --pitch 0 --yaw 0 \
+  --frame-id odom \
+  --child-frame-id base_link
+
+ros2 run tf2_ros static_transform_publisher \
+  --x 0.20 --y 0.0 --z 0.50 \
+  --roll 0 --pitch 0 --yaw 0 \
+  --frame-id base_link \
+  --child-frame-id camera_link
+
+
+
+ros2 run nav2_controller controller_server \
+  --ros-args --params-file ~/ground_costmap_test.yaml
+
+
+ros2 run nav2_lifecycle_manager lifecycle_manager \
+  --ros-args --params-file ~/ground_costmap_test.yaml
+
+pkill -f controller_server
+pkill -f lifecycle_manager
+pkill -f static_transform_publisher

@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Being2Lab Greenhouse Robot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Being2Lab Greenhouse Robot home">
+        <span class="brand-mark">
+          <img src="{{ url_for('static', filename='Logo_NSYSU_cropped.png') }}" alt="">
+        </span>
+        <span>
+          <span class="brand-title">Being2Lab Greenhouse Robot</span>
+          <span class="brand-subtitle">Voice navigation interface</span>
+        </span>
+      </a>
+
+      <div class="header-status" aria-label="System status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>NUC online</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="top-grid" aria-label="Robot console and voice command">
+        <section class="control-panel voice-panel" aria-labelledby="voice-panel-title">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Voice Command</p>
+              <h2 id="voice-panel-title">Recorder</h2>
+            </div>
+            <span id="recordingBadge" class="badge">Idle</span>
+          </div>
+
+          <div class="controls">
+            <button id="startBtn" class="button primary" type="button">
+              <svg class="button-icon mic-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <path d="M12 19v3"></path>
+                <path d="M8 22h8"></path>
+              </svg>
+              <span id="recordButtonLabel">Start Recording</span>
+            </button>
+          </div>
+
+          <div class="voice-result-block">
+            <p class="eyebrow">Recognized Text</p>
+            <div id="result" class="result" aria-live="polite">Waiting for a command.</div>
+          </div>
+
+        </section>
+
+        <section class="control-panel robot-task-panel" aria-labelledby="robot-task-title">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Robot Task</p>
+              <h2 id="robot-task-title">Mode Control</h2>
+            </div>
+          </div>
+
+          <div class="task-actions" aria-label="Robot task modes">
+            <button id="runNavigationBtn" class="button accent" type="button">Start 3D Navigation</button>
+          </div>
+        </section>
+
+      </section>
+
+      <section class="control-grid" aria-label="Robot voice controls">
+        <section class="control-panel emergency-panel" aria-labelledby="emergency-title">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Emergency</p>
+              <h2 id="emergency-title">Immediate Stop</h2>
+            </div>
+          </div>
+
+          <button id="stopNavBtn" class="button danger" type="button">Stop Robot</button>
+        </section>
+
+        <section class="control-panel map-panel" aria-labelledby="map-title">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">Navigation</p>
+              <h2 id="map-title">Live Map</h2>
+            </div>
+            <span id="mapStatus" class="badge">Offline</span>
+          </div>
+
+          <div class="map-viewport">
+            <canvas id="navMapCanvas" aria-label="Live navigation map"></canvas>
+            <div id="mapEmptyState" class="map-empty-state">Waiting for ROS map data...</div>
+            <div id="routeNodeMenu" class="route-node-menu" hidden>
+              <div class="route-node-title" id="routeNodeTitle">Node</div>
+              <div class="route-node-coords" id="routeNodeCoords"></div>
+              <div class="route-node-actions">
+                <button id="routeNodeGoBtn" class="button compact accent" type="button">Go</button>
+                <button id="routeNodeCancelBtn" class="button compact secondary" type="button">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="control-panel debug-panel" aria-labelledby="debug-title">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">System Log</p>
+              <h2 id="debug-title">Debug Output</h2>
+            </div>
+          </div>
+          <pre id="debug" class="debug" aria-live="polite">Debug output will appear here.
+</pre>
+        </section>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>NSYSU Being2Lab</span>
+      <span>ROS 2 voice command publisher</span>
+    </footer>
+  </div>
+
+  <script>
+    let mediaRecorder;
+    let audioChunks = [];
+    let activeStream;
+    const taskModes = {
+      navigation: {
+        label: "3D Navigation",
+        running: false,
+        runEndpoint: "/run-navigation",
+        stopEndpoint: "/stop-navigation",
+        statusEndpoint: "/navigation-status",
+        lastState: null
+      }
+    };
+
+    const startBtn = document.getElementById("startBtn");
+    const recordButtonLabel = document.getElementById("recordButtonLabel");
+    const stopNavBtn = document.getElementById("stopNavBtn");
+    const runNavigationBtn = document.getElementById("runNavigationBtn");
+    const result = document.getElementById("result");
+    const debugEl = document.getElementById("debug");
+    const recordingBadge = document.getElementById("recordingBadge");
+    const stateLabel = document.getElementById("stateLabel");
+    const mapCanvas = document.getElementById("navMapCanvas");
+    const mapStatus = document.getElementById("mapStatus");
+    const mapEmptyState = document.getElementById("mapEmptyState");
+    const routeNodeMenu = document.getElementById("routeNodeMenu");
+    const routeNodeTitle = document.getElementById("routeNodeTitle");
+    const routeNodeCoords = document.getElementById("routeNodeCoords");
+    const routeNodeGoBtn = document.getElementById("routeNodeGoBtn");
+    const routeNodeCancelBtn = document.getElementById("routeNodeCancelBtn");
+    const body = document.body;
+
+    const ROSBRIDGE_URL = {{ rosbridge_url|tojson }};
+    const mapCtx = mapCanvas.getContext("2d");
+    const mapState = {
+      socket: null,
+      map: null,
+      robotPose: null,
+      robotTfPose: null,
+      path: [],
+      goalPose: null,
+      routeMarkersByTopic: {},
+      routeGraphNodes: [],
+      selectedRouteNode: null,
+      tfTransforms: {},
+      imageCanvas: null,
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      dpr: window.devicePixelRatio || 1
+    };
+
+    function setState(label, statusClass) {
+      if (stateLabel) {
+        stateLabel.textContent = label;
+      }
+      recordingBadge.textContent = label;
+      body.dataset.status = statusClass || "ready";
+    }
+
+    function debugLog(msg) {
+      if (!debugEl) return;
+      const time = new Date().toLocaleTimeString();
+      debugEl.textContent += `[${time}] ${msg}\n`;
+      debugEl.scrollTop = debugEl.scrollHeight;
+    }
+
+    function setRecordButton(mode) {
+      const isRecording = mode === "recording";
+      const isProcessing = mode === "processing";
+      recordButtonLabel.textContent = isProcessing
+        ? "Processing..."
+        : (isRecording ? "Stop and Send" : "Start Recording");
+      startBtn.disabled = isProcessing;
+      startBtn.classList.toggle("recording", isRecording);
+    }
+
+    function releaseMicrophone() {
+      if (!activeStream) return;
+      activeStream.getTracks().forEach(track => track.stop());
+      activeStream = null;
+    }
+
+    function setMapStatus(label, isOnline) {
+      mapStatus.textContent = label;
+      mapStatus.classList.toggle("online", Boolean(isOnline));
+    }
+
+    function resizeMapCanvas() {
+      const rect = mapCanvas.getBoundingClientRect();
+      mapState.dpr = window.devicePixelRatio || 1;
+      mapCanvas.width = Math.max(1, Math.floor(rect.width * mapState.dpr));
+      mapCanvas.height = Math.max(1, Math.floor(rect.height * mapState.dpr));
+      drawNavigationMap();
+    }
+
+    function getYawFromQuaternion(q) {
+      const siny = 2 * (q.w * q.z + q.x * q.y);
+      const cosy = 1 - 2 * (q.y * q.y + q.z * q.z);
+      return Math.atan2(siny, cosy);
+    }
+
+    function makeQuaternionFromYaw(yaw) {
+      return {
+        x: 0,
+        y: 0,
+        z: Math.sin(yaw * 0.5),
+        w: Math.cos(yaw * 0.5)
+      };
+    }
+
+    function normalizeFrame(frame) {
+      return (frame || "").replace(/^\/+/, "");
+    }
+
+    function storeTransform(transformStamped) {
+      const parent = normalizeFrame(transformStamped.header.frame_id);
+      const child = normalizeFrame(transformStamped.child_frame_id);
+      if (!parent || !child) return;
+
+      mapState.tfTransforms[`${parent}->${child}`] = {
+        parent,
+        child,
+        translation: transformStamped.transform.translation,
+        rotation: transformStamped.transform.rotation,
+        yaw: getYawFromQuaternion(transformStamped.transform.rotation)
+      };
+    }
+
+    function getStoredTransform(parent, child) {
+      return mapState.tfTransforms[`${normalizeFrame(parent)}->${normalizeFrame(child)}`] || null;
+    }
+
+    function composeTransforms(first, second) {
+      const cos = Math.cos(first.yaw);
+      const sin = Math.sin(first.yaw);
+      const x = first.translation.x + cos * second.translation.x - sin * second.translation.y;
+      const y = first.translation.y + sin * second.translation.x + cos * second.translation.y;
+      const yaw = first.yaw + second.yaw;
+
+      return {
+        parent: first.parent,
+        child: second.child,
+        translation: { x, y, z: (first.translation.z || 0) + (second.translation.z || 0) },
+        rotation: makeQuaternionFromYaw(yaw),
+        yaw
+      };
+    }
+
+    function updateRobotPoseFromTf() {
+      const directBaseLink = getStoredTransform("map", "base_link");
+      const directBaseFootprint = getStoredTransform("map", "base_footprint");
+      const mapToOdom = getStoredTransform("map", "odom");
+      const odomToBaseLink = getStoredTransform("odom", "base_link");
+      const odomToBaseFootprint = getStoredTransform("odom", "base_footprint");
+      const transform = directBaseLink
+        || directBaseFootprint
+        || (mapToOdom && odomToBaseLink ? composeTransforms(mapToOdom, odomToBaseLink) : null)
+        || (mapToOdom && odomToBaseFootprint ? composeTransforms(mapToOdom, odomToBaseFootprint) : null);
+
+      if (!transform) return;
+
+      mapState.robotTfPose = {
+        position: {
+          x: transform.translation.x,
+          y: transform.translation.y,
+          z: transform.translation.z || 0
+        },
+        orientation: transform.rotation
+      };
+    }
+
+    function worldToCanvas(x, y) {
+      const map = mapState.map;
+      const origin = map.info.origin.position;
+      const widthMeters = map.info.width * map.info.resolution;
+      const heightMeters = map.info.height * map.info.resolution;
+      const localX = x - origin.x;
+      const localY = heightMeters - (y - origin.y);
+      const px = localY * mapState.scale + mapState.offsetX;
+      const py = (widthMeters - localX) * mapState.scale + mapState.offsetY;
+      return { x: px, y: py };
+    }
+
+    function canvasEventPoint(event) {
+      const rect = mapCanvas.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * mapState.dpr,
+        y: (event.clientY - rect.top) * mapState.dpr,
+        cssX: event.clientX - rect.left,
+        cssY: event.clientY - rect.top
+      };
+    }
+
+    function buildMapImage(message) {
+      const width = message.info.width;
+      const height = message.info.height;
+      const imageCanvas = document.createElement("canvas");
+      const imageCtx = imageCanvas.getContext("2d");
+      const imageData = imageCtx.createImageData(width, height);
+
+      imageCanvas.width = width;
+      imageCanvas.height = height;
+
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const sourceIndex = x + (height - 1 - y) * width;
+          const targetIndex = (x + y * width) * 4;
+          const value = message.data[sourceIndex];
+
+          let shade = 36;
+          let alpha = 110;
+
+          if (value === 0) {
+            shade = 226;
+            alpha = 230;
+          } else if (value > 0) {
+            shade = Math.max(18, 190 - value * 1.7);
+            alpha = 245;
+          }
+
+          imageData.data[targetIndex] = shade;
+          imageData.data[targetIndex + 1] = shade;
+          imageData.data[targetIndex + 2] = shade;
+          imageData.data[targetIndex + 3] = alpha;
+        }
+      }
+
+      imageCtx.putImageData(imageData, 0, 0);
+      mapState.imageCanvas = imageCanvas;
+    }
+
+    function drawPath() {
+      if (!mapState.path.length) return;
+
+      mapCtx.save();
+      mapCtx.beginPath();
+      mapState.path.forEach((poseStamped, index) => {
+        const position = poseStamped.pose.position;
+        const point = worldToCanvas(position.x, position.y);
+        if (index === 0) {
+          mapCtx.moveTo(point.x, point.y);
+        } else {
+          mapCtx.lineTo(point.x, point.y);
+        }
+      });
+      mapCtx.lineWidth = Math.max(2, 3 * mapState.dpr);
+      mapCtx.strokeStyle = "#62b6ff";
+      mapCtx.shadowColor = "rgba(98, 182, 255, 0.55)";
+      mapCtx.shadowBlur = 10 * mapState.dpr;
+      mapCtx.stroke();
+      mapCtx.restore();
+    }
+
+    function drawGoal() {
+      if (!mapState.goalPose) return;
+
+      const position = mapState.goalPose.position || mapState.goalPose.pose?.position;
+      if (!position) return;
+
+      const point = worldToCanvas(position.x, position.y);
+      mapCtx.save();
+      mapCtx.fillStyle = "#f5bf5a";
+      mapCtx.strokeStyle = "#fff7d5";
+      mapCtx.lineWidth = 2 * mapState.dpr;
+      mapCtx.beginPath();
+      mapCtx.arc(point.x, point.y, 7 * mapState.dpr, 0, Math.PI * 2);
+      mapCtx.fill();
+      mapCtx.stroke();
+      mapCtx.restore();
+    }
+
+    function transformMarkerPoint(marker, point) {
+      return {
+        x: (point.x || 0) + (marker.pose?.position?.x || 0),
+        y: (point.y || 0) + (marker.pose?.position?.y || 0),
+        z: (point.z || 0) + (marker.pose?.position?.z || 0)
+      };
+    }
+
+    function markerColor(marker, fallback) {
+      const color = marker.color || {};
+      if (!color.a) return fallback;
+
+      const r = Math.round((color.r || 0) * 255);
+      const g = Math.round((color.g || 0) * 255);
+      const b = Math.round((color.b || 0) * 255);
+      const a = Math.max(0.2, Math.min(1, color.a));
+      return `rgba(${r}, ${g}, ${b}, ${a})`;
+    }
+
+    function drawPointMarker(marker, point, radius, fillStyle) {
+      const worldPoint = transformMarkerPoint(marker, point);
+      const canvasPoint = worldToCanvas(worldPoint.x, worldPoint.y);
+      mapCtx.beginPath();
+      mapCtx.arc(canvasPoint.x, canvasPoint.y, radius, 0, Math.PI * 2);
+      mapCtx.fillStyle = fillStyle;
+      mapCtx.fill();
+    }
+
+    function drawLineMarker(marker, closeLoop) {
+      if (!marker.points || marker.points.length < 2) return;
+
+      mapCtx.beginPath();
+      marker.points.forEach((point, index) => {
+        const worldPoint = transformMarkerPoint(marker, point);
+        const canvasPoint = worldToCanvas(worldPoint.x, worldPoint.y);
+        if (index === 0) {
+          mapCtx.moveTo(canvasPoint.x, canvasPoint.y);
+        } else {
+          mapCtx.lineTo(canvasPoint.x, canvasPoint.y);
+        }
+      });
+
+      if (closeLoop) {
+        mapCtx.closePath();
+      }
+
+      mapCtx.strokeStyle = markerColor(marker, "rgba(245, 191, 90, 0.92)");
+      mapCtx.lineWidth = Math.max(2, (marker.scale?.x || 0.05) * mapState.scale);
+      mapCtx.stroke();
+    }
+
+    function drawRouteMarkers() {
+      const markers = Object.values(mapState.routeMarkersByTopic).flat();
+      if (!markers.length) return;
+
+      mapCtx.save();
+      mapCtx.shadowColor = "rgba(245, 191, 90, 0.36)";
+      mapCtx.shadowBlur = 8 * mapState.dpr;
+
+      markers.forEach(marker => {
+        if (marker.action === 2 || marker.action === 3) return;
+
+        const type = marker.type;
+        const fillStyle = markerColor(marker, "rgba(245, 191, 90, 0.92)");
+        const radius = Math.max(4, (marker.scale?.x || 0.12) * mapState.scale * 0.5);
+
+        if (type === 4) {
+          drawLineMarker(marker, false);
+        } else if (type === 5) {
+          for (let i = 0; i + 1 < marker.points.length; i += 2) {
+            drawLineMarker({ ...marker, points: [marker.points[i], marker.points[i + 1]] }, false);
+          }
+        } else if (type === 7 || type === 8) {
+          marker.points.forEach(point => drawPointMarker(marker, point, radius, fillStyle));
+        } else if ([0, 1, 2, 3].includes(type)) {
+          drawPointMarker(marker, { x: 0, y: 0, z: 0 }, radius, fillStyle);
+        }
+      });
+
+      mapCtx.restore();
+    }
+
+    function drawRouteGraphNodes() {
+      if (!mapState.routeGraphNodes.length) return;
+
+      mapCtx.save();
+      mapCtx.font = `${Math.max(11, 12 * mapState.dpr)}px Inter, Arial, sans-serif`;
+      mapCtx.textAlign = "center";
+      mapCtx.textBaseline = "middle";
+
+      mapState.routeGraphNodes.forEach(node => {
+        const point = worldToCanvas(node.x, node.y);
+        const selected = mapState.selectedRouteNode && mapState.selectedRouteNode.id === node.id;
+        const radius = selected ? 8 * mapState.dpr : 6 * mapState.dpr;
+
+        mapCtx.beginPath();
+        mapCtx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        mapCtx.fillStyle = selected ? "#f5bf5a" : "#17a36f";
+        mapCtx.strokeStyle = "#ffffff";
+        mapCtx.lineWidth = 2 * mapState.dpr;
+        mapCtx.fill();
+        mapCtx.stroke();
+
+        mapCtx.fillStyle = "#10201c";
+        mapCtx.fillText(String(node.id), point.x, point.y - 15 * mapState.dpr);
+      });
+
+      mapCtx.restore();
+    }
+
+    function drawRobot() {
+      const robotPose = mapState.robotTfPose || mapState.robotPose;
+      if (!robotPose) return;
+
+      const position = robotPose.position;
+      const orientation = robotPose.orientation;
+      const point = worldToCanvas(position.x, position.y);
+      const yaw = -getYawFromQuaternion(orientation) - Math.PI / 2;
+      const size = 16 * mapState.dpr;
+
+      mapCtx.save();
+      mapCtx.translate(point.x, point.y);
+      mapCtx.rotate(yaw);
+      mapCtx.fillStyle = "#5ee0a1";
+      mapCtx.strokeStyle = "#06241c";
+      mapCtx.lineWidth = 2 * mapState.dpr;
+      mapCtx.beginPath();
+      mapCtx.moveTo(size, 0);
+      mapCtx.lineTo(-size * 0.7, -size * 0.62);
+      mapCtx.lineTo(-size * 0.38, 0);
+      mapCtx.lineTo(-size * 0.7, size * 0.62);
+      mapCtx.closePath();
+      mapCtx.fill();
+      mapCtx.stroke();
+      mapCtx.restore();
+    }
+
+    function drawNavigationMap() {
+      const width = mapCanvas.width;
+      const height = mapCanvas.height;
+      mapCtx.clearRect(0, 0, width, height);
+      mapCtx.fillStyle = "rgba(4, 18, 19, 0.36)";
+      mapCtx.fillRect(0, 0, width, height);
+
+      if (!mapState.map || !mapState.imageCanvas) {
+        mapEmptyState.hidden = false;
+        return;
+      }
+
+      mapEmptyState.hidden = true;
+      const mapWidthMeters = mapState.map.info.width * mapState.map.info.resolution;
+      const mapHeightMeters = mapState.map.info.height * mapState.map.info.resolution;
+      const rotatedWidthMeters = mapHeightMeters;
+      const rotatedHeightMeters = mapWidthMeters;
+      const padding = 22 * mapState.dpr;
+      mapState.scale = Math.min(
+        (width - padding * 2) / rotatedWidthMeters,
+        (height - padding * 2) / rotatedHeightMeters
+      );
+      mapState.offsetX = (width - rotatedWidthMeters * mapState.scale) / 2;
+      mapState.offsetY = (height - rotatedHeightMeters * mapState.scale) / 2;
+
+      mapCtx.imageSmoothingEnabled = false;
+      mapCtx.save();
+      mapCtx.translate(mapState.offsetX, mapState.offsetY + mapWidthMeters * mapState.scale);
+      mapCtx.rotate(-Math.PI / 2);
+      mapCtx.drawImage(
+        mapState.imageCanvas,
+        0,
+        0,
+        mapWidthMeters * mapState.scale,
+        mapHeightMeters * mapState.scale
+      );
+      mapCtx.restore();
+
+      drawPath();
+      drawRouteMarkers();
+      drawRouteGraphNodes();
+      drawGoal();
+      drawRobot();
+    }
+
+    function findRouteNodeAtCanvasPoint(point) {
+      if (!mapState.map || !mapState.routeGraphNodes.length) return null;
+
+      const hitRadius = 14 * mapState.dpr;
+      let bestNode = null;
+      let bestDistance = Infinity;
+
+      mapState.routeGraphNodes.forEach(node => {
+        const nodePoint = worldToCanvas(node.x, node.y);
+        const distance = Math.hypot(point.x - nodePoint.x, point.y - nodePoint.y);
+        if (distance <= hitRadius && distance < bestDistance) {
+          bestNode = node;
+          bestDistance = distance;
+        }
+      });
+
+      return bestNode;
+    }
+
+    function hideRouteNodeMenu() {
+      mapState.selectedRouteNode = null;
+      routeNodeMenu.hidden = true;
+      drawNavigationMap();
+    }
+
+    function showRouteNodeMenu(node, point) {
+      mapState.selectedRouteNode = node;
+      routeNodeTitle.textContent = `Node ${node.id}`;
+      routeNodeCoords.textContent = `${node.x.toFixed(2)}, ${node.y.toFixed(2)}`;
+
+      const viewportRect = mapCanvas.getBoundingClientRect();
+      const menuWidth = 178;
+      const left = Math.min(Math.max(8, point.cssX + 10), Math.max(8, viewportRect.width - menuWidth - 8));
+      const top = Math.min(Math.max(8, point.cssY + 10), Math.max(8, viewportRect.height - 112));
+
+      routeNodeMenu.style.left = `${left}px`;
+      routeNodeMenu.style.top = `${top}px`;
+      routeNodeMenu.hidden = false;
+      drawNavigationMap();
+    }
+
+    async function fetchRouteGraph() {
+      try {
+        const response = await fetch("/route-graph");
+        const data = await response.json();
+        if (response.ok && data.ok) {
+          mapState.routeGraphNodes = data.nodes || [];
+          debugLog(
+            `Loaded ${mapState.routeGraphNodes.length} route graph nodes from ` +
+            `${data.route_graph_file} (${data.route_graph_source})`
+          );
+          drawNavigationMap();
+        } else {
+          debugLog("Route graph load failed: " + (data.error || JSON.stringify(data)));
+        }
+      } catch (err) {
+        debugLog("Route graph request failed: " + err.message);
+      }
+    }
+
+    async function sendRouteNodeCommand(node) {
+      try {
+        routeNodeGoBtn.disabled = true;
+        result.innerText = `Sending node ${node.id} command...`;
+        setState("Commanding", "processing");
+        debugLog(`Sending route node ${node.id} command`);
+
+        const response = await fetch("/route-node-command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ node_id: node.id })
+        });
+        const data = await response.json();
+
+        if (response.ok && data.ok) {
+          mapState.goalPose = {
+            position: { x: node.x, y: node.y, z: 0 },
+            orientation: makeQuaternionFromYaw(node.yaw || 0)
+          };
+          result.innerText = `Nav2 accepted goal: node ${node.id}`;
+          setState("Navigating", "processing");
+          debugLog(`Nav2 accepted ${data.text}; goal ID: ${data.goal_id || "unknown"}`);
+          hideRouteNodeMenu();
+        } else {
+          result.innerText = data.error || `Failed to command node ${node.id}`;
+          setState("Review", "warning");
+          debugLog("Route node command failed: " + (data.error || JSON.stringify(data)));
+        }
+      } catch (err) {
+        result.innerText = `Error commanding node ${node.id}`;
+        setState("Offline", "warning");
+        debugLog(`Route node command error: ${err.message}`);
+      } finally {
+        routeNodeGoBtn.disabled = false;
+      }
+    }
+
+    function subscribeToRosTopic(topic, type, throttleRate) {
+      mapState.socket.send(JSON.stringify({
+        op: "subscribe",
+        topic,
+        type,
+        throttle_rate: throttleRate || 0
+      }));
+    }
+
+    function handleRosMessage(event) {
+      const packet = JSON.parse(event.data);
+      if (packet.op !== "publish") return;
+
+      if (packet.topic === "/map") {
+        mapState.map = packet.msg;
+        buildMapImage(packet.msg);
+      } else if (packet.topic === "/amcl_pose") {
+        mapState.robotPose = packet.msg.pose.pose;
+      } else if (packet.topic === "/tf") {
+        (packet.msg.transforms || []).forEach(storeTransform);
+        updateRobotPoseFromTf();
+      } else if (packet.topic === "/plan") {
+        mapState.path = packet.msg.poses || [];
+      } else if (packet.msg.markers) {
+        mapState.routeMarkersByTopic[packet.topic] = packet.msg.markers;
+      } else if (packet.msg.type !== undefined && packet.msg.pose) {
+        mapState.routeMarkersByTopic[packet.topic] = [packet.msg];
+      }
+
+      drawNavigationMap();
+    }
+
+    function connectRosbridge() {
+      try {
+        setMapStatus("Connecting", false);
+        mapState.socket = new WebSocket(ROSBRIDGE_URL);
+
+        mapState.socket.onopen = () => {
+          setMapStatus("Online", true);
+          debugLog(`Connected to rosbridge at ${ROSBRIDGE_URL}`);
+          subscribeToRosTopic("/map", "nav_msgs/msg/OccupancyGrid", 1000);
+          subscribeToRosTopic("/tf", "tf2_msgs/msg/TFMessage", 100);
+          subscribeToRosTopic("/amcl_pose", "geometry_msgs/msg/PoseWithCovarianceStamped", 100);
+          subscribeToRosTopic("/plan", "nav_msgs/msg/Path", 250);
+          subscribeToRosTopic("/route_markers", "visualization_msgs/msg/MarkerArray", 250);
+          subscribeToRosTopic("/route_graph", "visualization_msgs/msg/MarkerArray", 250);
+          subscribeToRosTopic("/route_graph_markers", "visualization_msgs/msg/MarkerArray", 250);
+          subscribeToRosTopic("/visualization_marker_array", "visualization_msgs/msg/MarkerArray", 250);
+          subscribeToRosTopic("/visualization_marker", "visualization_msgs/msg/Marker", 250);
+        };
+
+        mapState.socket.onmessage = handleRosMessage;
+        mapState.socket.onerror = () => {
+          setMapStatus("Error", false);
+          debugLog(`rosbridge connection error at ${ROSBRIDGE_URL}`);
+        };
+        mapState.socket.onclose = () => {
+          setMapStatus("Offline", false);
+        };
+      } catch (err) {
+        setMapStatus("Offline", false);
+        debugLog("Could not connect to rosbridge: " + err.message);
+      }
+    }
+
+    function taskButton(taskId) {
+      return runNavigationBtn;
+    }
+
+    function updateTaskButton(taskId, isRunning) {
+      const task = taskModes[taskId];
+      const button = taskButton(taskId);
+      task.running = isRunning;
+      button.textContent = isRunning ? `Stop ${task.label}` : `Start ${task.label}`;
+      button.classList.toggle("stop", isRunning);
+    }
+
+    async function refreshTaskStatus(taskId) {
+      const task = taskModes[taskId];
+      try {
+        const resp = await fetch(task.statusEndpoint);
+        const data = await resp.json();
+        if (resp.ok && data.ok) {
+          updateTaskButton(taskId, Boolean(data.running));
+          if (task.lastState !== data.state) {
+            task.lastState = data.state;
+            debugLog(
+              `${task.label} state=${data.state} managed=${Boolean(data.managed)} ` +
+              `localization=${Boolean(data.localization_ready)} action=${Boolean(data.action_ready)}`
+            );
+          }
+          if (!mediaRecorder || mediaRecorder.state !== "recording") {
+            if (data.state === "ready") {
+              setState("Navigation Ready", "ready");
+            } else if (data.state === "starting") {
+              setState("Navigation Starting", "processing");
+            } else if (data.state === "failed") {
+              setState("Navigation Failed", "warning");
+            } else if (data.state === "stopped") {
+              setState("Ready", "ready");
+            }
+          }
+        }
+      } catch (err) {
+        debugLog(`Could not read ${task.label} status: ${err.message}`);
+      }
+    }
+
+    async function startRecording() {
+      try {
+        setRecordButton("processing");
+        audioChunks = [];
+        debugLog("Start recording requested");
+
+        activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(activeStream);
+
+        mediaRecorder.ondataavailable = event => {
+          audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          setRecordButton("processing");
+          releaseMicrophone();
+          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "command.webm");
+
+          result.innerText = "Transcribing on NUC...";
+          setState("Processing", "processing");
+          debugLog("Recording stopped, sending audio to /transcribe");
+
+          try {
+            const response = await fetch("/transcribe", {
+              method: "POST",
+              body: formData
+            });
+
+            const data = await response.json();
+            result.innerText = data.text || data.error || "No result.";
+            setState(response.ok && data.ok ? "Ready" : "Review", response.ok && data.ok ? "ready" : "warning");
+            debugLog("Transcription response: " + (data.text || data.error || JSON.stringify(data)));
+          } catch (err) {
+            result.innerText = "Unable to reach transcription service.";
+            setState("Offline", "warning");
+            debugLog("Transcription request failed: " + err.message);
+          } finally {
+            setRecordButton("idle");
+          }
+        };
+
+        mediaRecorder.start();
+        result.innerText = "Recording...";
+        setState("Recording", "recording");
+        setRecordButton("recording");
+      } catch (err) {
+        result.innerText = "Microphone access was not available.";
+        setState("Mic Error", "warning");
+        setRecordButton("idle");
+        debugLog("Microphone error: " + err.message);
+      }
+    }
+
+    function stopRecording() {
+      if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+      mediaRecorder.stop();
+    }
+
+    startBtn.onclick = () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    };
+
+    stopNavBtn.onclick = async () => {
+      try {
+        result.innerText = "Sending STOP command...";
+        setState("Stopping", "warning");
+        debugLog("Sending STOP command to /cancel");
+        const resp = await fetch("/cancel", { method: "POST" });
+        const data = await resp.json();
+
+        if (resp.ok && data.ok) {
+          result.innerText = data.state === "no_active_goal"
+            ? "Robot stopped; no active Nav2 goal"
+            : "Navigation canceled and stop confirmed";
+          setState("Stopped", "warning");
+          debugLog(`STOP confirmed by Nav2. state=${data.state} goals=${(data.canceled_goal_ids || []).join(",") || "none"}`);
+        } else {
+          result.innerText = data.error || "Failed to send STOP";
+          setState("Review", "warning");
+          debugLog("STOP failed: " + (data.error || JSON.stringify(data)));
+        }
+      } catch (err) {
+        result.innerText = "Error sending STOP";
+        setState("Offline", "warning");
+        debugLog("Error sending STOP: " + err.message);
+      }
+    };
+
+    async function toggleTask(taskId) {
+      const task = taskModes[taskId];
+      const button = taskButton(taskId);
+
+      try {
+        button.disabled = true;
+        const endpoint = task.running ? task.stopEndpoint : task.runEndpoint;
+        result.innerText = task.running ? `Stopping ${task.label.toLowerCase()}...` : `Starting ${task.label.toLowerCase()}...`;
+        setState(task.running ? "Stopping" : "Launching", task.running ? "warning" : "processing");
+        debugLog(`Sending ${task.label} request to ${endpoint}`);
+
+        const resp = await fetch(endpoint, { method: "POST" });
+        const data = await resp.json();
+
+        if (resp.ok && data.ok) {
+          const isRunning = Boolean(data.running);
+          updateTaskButton(taskId, isRunning);
+          result.innerText = data.pid ? `${data.message} PID: ${data.pid}` : data.message;
+          setState(
+            data.state === "ready" ? "Navigation Ready" : (isRunning ? "Navigation Starting" : "Ready"),
+            data.state === "ready" ? "ready" : (isRunning ? "processing" : "ready")
+          );
+          debugLog(`${data.message} Log: ${data.log}`);
+          if (taskId === "navigation" && isRunning) {
+            fetchRouteGraph();
+          }
+        } else {
+          result.innerText = data.message || `Failed to start ${task.label.toLowerCase()}.`;
+          setState("Review", "warning");
+          debugLog(`${task.label} request failed: ` + (data.message || JSON.stringify(data)));
+        }
+      } catch (err) {
+        result.innerText = `Error controlling ${task.label.toLowerCase()}.`;
+        setState("Offline", "warning");
+        debugLog(`Error controlling ${task.label}: ${err.message}`);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    runNavigationBtn.onclick = () => toggleTask("navigation");
+    routeNodeCancelBtn.onclick = hideRouteNodeMenu;
+    routeNodeGoBtn.onclick = () => {
+      if (mapState.selectedRouteNode) {
+        sendRouteNodeCommand(mapState.selectedRouteNode);
+      }
+    };
+    mapCanvas.addEventListener("click", event => {
+      const point = canvasEventPoint(event);
+      const node = findRouteNodeAtCanvasPoint(point);
+      if (node) {
+        showRouteNodeMenu(node, point);
+      } else if (!routeNodeMenu.hidden) {
+        hideRouteNodeMenu();
+      }
+    });
+
+    refreshTaskStatus("navigation");
+    window.setInterval(() => refreshTaskStatus("navigation"), 3000);
+    fetchRouteGraph();
+    resizeMapCanvas();
+    connectRosbridge();
+    window.addEventListener("resize", resizeMapCanvas);
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "ros_setup": "/opt/ros/kilted/setup.bash",
+  "workspace_setup": "install/setup.bash",
+  "tasks": {
+    "navigation": {
+      "label": "3D Navigation",
+      "script": "/home/beinglab-kilted/carbot_ws/navigation_3d.sh",
+      "workdir": "/home/beinglab-kilted/carbot_ws",
+      "log": "navigation_3d.log"
+    }
+  }
+}

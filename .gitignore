@@ -1,0 +1,30 @@
+
+# ROS generated directories
+build/
+install/
+log/
+devel/
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+# Editors
+.vscode/
+.idea/
+
+# Web dependencies
+node_modules/
+
+# ROS recordings and temporary databases
+*.bag
+*.db3
+
+# Local TLS secrets
+cert.pem
+key.pem

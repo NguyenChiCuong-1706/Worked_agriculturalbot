@@ -1,0 +1,55 @@
+
+# Mapping
+ros2 launch fast_lio_sam_qn run.launch.py lidar:=mid360
+
+
+ros2 topic pub --once /save_dir std_msgs/msg/String \
+  "{data: '/home/beinglab-kilted/carbot_ws/maps'}"
+
+# Localization
+ros2 launch fast_lio_localization_sc_qn run.launch.py lidar:=mid360
+
+ros2 bag play /home/beinglab-kilted/bags/mapdata_1 \
+  --clock \
+  --topics /livox/lidar /livox/imu /Odometry /cloud_registered /cloud_registered_body \
+  --remap /Odometry:=/fastlio1/Odometry \
+          /cloud_registered:=/fastlio1/cloud_registered \
+          /cloud_registered_body:=/fastlio1/cloud_registered_body
+
+# PCD2PGM
+ros2 launch pcd2pgm pcd2pgm_launch.py
+
+
+ros2 run nav2_map_server map_saver_cli \
+  -t /map \
+  -f /home/beinglab-kilted/carbot_ws/maps/map_grid \
+  --ros-args -p map_subscribe_transient_local:=true
+
+gimp /home/beinglab-kilted/carbot_ws/maps/mymap_0/levelled_map_grid.pgm
+
+ros2 launch nav2_rviz_plugins route_tool.launch.py yaml_filename:=/home/beinglab-kilted/carbot_ws/maps/mymap_0/mymap_map_grid_cleaned.yaml
+
+ros2 run nav2_map_server map_server --ros-args   -p yaml_filename:=/home/beinglab-kilted/carbot_ws/maps/mymap_0/mymap_map_grid_cleaned.yaml   -p topic_name:=map   -p frame_id:=map
+
+
+ros2 run fast_lio_sam_qn level_pcd_map \
+  /home/beinglab-kilted/carbot_ws/maps/mymap_0/mymap_map.pcd \
+  /home/beinglab-kilted/carbot_ws/maps/mymap_0/levelled_map.pcd \
+  --transform-yaml /home/beinglab-kilted/carbot_ws/maps/mymap_0/levelled_map_transform.yaml
+
+
+ros2 run pointcloud_to_laserscan pointcloud_to_laserscan_node \
+  --ros-args \
+  --params-file /home/beinglab-kilted/carbot_ws/src/Carbot/fl_nav2_helper/config/pointcloud_to_laserscan.yaml\
+  -r cloud_in:=/cloud_registered_body \
+  -r scan:=/scan
+
+ros2 run tf2_ros static_transform_publisher   --x 0 --y 0 --z 0   --roll 0 --pitch 0 --yaw 0   --frame-id base_link   --child-frame-id camera_init
+
+
+ros2 lifecycle set /map_server configure
+ros2 lifecycle set /map_server activate
+
+rm -f /home/beinglab-kilted/carbot_ws/install/fast_lio_sam_qn/share/fast_lio_sam_qn/result.pcd
+
+rm -rf /home/beinglab-kilted/carbot_ws/install/fast_lio_sam_qn/share/fast_lio_sam_qn/result.bag

@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<robot name="carbot" xmlns:xacro="http://www.ros.org/wiki/xacro" >
+
+  <link name="base_link">
+  </link>
+  
+  <link name="base_footprint">
+  </link>
+  <joint name="base_footprint_joint" type="fixed">
+    <origin xyz="0 0 0" />
+    <parent link="base_link" />
+    <child link="base_footprint" />
+  </joint>
+
+  <link name="camera_link">
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <origin xyz="0.45 0 0.3" />
+    <parent link="base_link" />
+    <child link="camera_link" />
+  </joint>
+
+  <link name="laser_frame">
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <origin xyz="0.345 0.0 0.1" rpy="0.0 0.0 0.0" />
+    <parent link="base_link" />
+    <child link="laser_frame" />
+  </joint>
+
+  <!-- Right-Drive link -->
+  <link name="RD_link">
+  </link>
+  <joint name="RD_joint" type="continuous">
+    <origin xyz="0 -0.2925 0" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="RD_link" />
+    <axis xyz="-1 0 0" />    
+  </joint>
+
+  <!-- Left-Drive link -->
+  <link name="LD_link">
+  </link>
+  <joint name="LD_joint" type="continuous">
+    <origin xyz="0 0.2925 0" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="LD_link" />
+    <axis xyz="1 0 0" />
+  </joint>
+
+</robot>

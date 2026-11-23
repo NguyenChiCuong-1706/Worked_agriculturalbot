@@ -1,0 +1,15 @@
+input_pcd: maps/mymap_0/mymap_map.pcd
+output_pcd: maps/mymap_0/levelled_map.pcd
+method: ransac_low_z_plane_svd_refine
+ransac_distance_threshold_m: 0.08
+ransac_inliers_low_z_sample: 5714
+ground_plane_original:
+  normal: [-0.0528277321089, 0.0392400942673, 0.997832373559]
+  d: 0.653868960927
+rotation_original_to_levelled:
+  angle_deg: 3.77318700848
+  matrix:
+    - [0.998603101383, 0.00103760716631, 0.0528277321089]
+    - [0.00103760716631, 0.999229272176, -0.0392400942673]
+    - [-0.0528277321089, 0.0392400942673, 0.997832373559]
+rotated_normal_check: [6.93889390391e-18, 0, 1]

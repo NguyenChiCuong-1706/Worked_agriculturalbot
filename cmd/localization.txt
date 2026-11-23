@@ -1,0 +1,26 @@
+
+# Mapping
+ros2 launch fast_lio_sam_qn run.launch.py lidar:=mid360
+
+source ~/robot_ws/install/setup.bash
+mkdir -p ~/robot_ws/maps
+
+ros2 topic pub --once /save_dir std_msgs/msg/String \
+  "{data: '/home/beinglab-kilted/carbot_ws/maps'}"
+
+# Localization
+ros2 launch fast_lio_localization_sc_qn run.launch.py lidar:=mid360
+
+ros2 bag play greenhouse_local_20260622_105135 \
+  --clock \
+  --topics /livox/lidar /livox/imu /Odometry /cloud_registered /cloud_registered_body \
+  --remap /Odometry:=/fastlio1/Odometry \
+          /cloud_registered:=/fastlio1/cloud_registered \
+          /cloud_registered_body:=/fastlio1/cloud_registered_body
+
+# PCD2PGM
+ros2 launch pcd2pgm pcd2pgm_launch.py
+
+gimp /home/cuong/robot_ws/maps/mymap_0/mymap_map_cleaned.pgm
+
+ros2 launch nav2_rviz_plugins route_tool.launch.py yaml_filename:=/home/cuong/robot_ws/maps/mymap_0/mymap_map_grid_cleaned.yaml

@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+        <ros2_control name="RealRobot" type="system">
+            <hardware>
+                <!-- Arduino interface -->
+                <plugin>diffdrive_arduino/DiffDriveArduinoHardware</plugin> 
+                <param name="left_wheel_name">LD_joint</param>
+                <param name="right_wheel_name">RD_joint</param>
+                <param name="device">/dev/ttyACM0</param>
+                <param name="baud_rate">115200</param>
+                <param name="timeout_ms">1000</param>
+                <param name="startup_delay_ms">3000</param>
+                <param name="max_motor_command">220</param>
+                <param name="max_wheel_angular_velocity">6.87</param>
+                <!-- Arduino interface -->
+            </hardware>
+            <!-- Speed limit -->
+            <joint name="LD_joint">
+                <command_interface name="velocity">
+                    <param name="min">-6.87</param>
+                    <param name="max">6.87</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="RD_joint">
+                <command_interface name="velocity">
+                    <param name="min">-6.87</param>
+                    <param name="max">6.87</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+        </ros2_control>
+
+</robot>

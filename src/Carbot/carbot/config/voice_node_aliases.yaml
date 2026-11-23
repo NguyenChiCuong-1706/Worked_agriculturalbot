@@ -1,0 +1,30 @@
+route_mission_client:
+  ros__parameters:
+    home_node_id: 1
+    charging_node_id: 4
+
+    node_aliases:
+      - "node one:1"
+      - "row one:1"
+      - "row number one:1"
+      - "stair:1"
+      - "stairs:1"
+      - "the stair:1"
+
+      - "node two:2"
+      - "row two:2"
+      - "row number two:2"
+      - "lab:2"
+      - "laboratory:2"
+      - "the lab:2"
+
+      - "node three:3"
+      - "office:3"
+      - "main office:3"
+
+      - "charging station:4"
+      - "charger:4"
+      - "charge station:4"
+controller_manager:
+  ros__parameters:
+    use_sim_time: true

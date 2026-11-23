@@ -1,0 +1,13 @@
+[submodule "FAST_LIO2"]
+	path = FAST_LIO2
+	url = https://github.com/hku-mars/FAST_LIO.git
+	branch = ROS2
+[submodule "Quatro"]
+	path = Quatro
+	url = https://github.com/illusionaryshelter/Quatro.git
+[submodule "nano_gicp"]
+	path = nano_gicp
+	url = https://github.com/illusionaryshelter/nano_gicp.git
+[submodule "livox_ros_driver2"]
+	path = livox_ros_driver2
+	url = https://github.com/Livox-SDK/livox_ros_driver2.git

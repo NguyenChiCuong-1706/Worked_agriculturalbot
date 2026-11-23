@@ -1,0 +1,66 @@
+rtabmap:
+  ros__parameters:
+    # ===== ROS2 wrapper params =====
+    frame_id: base_link
+    map_frame_id: map
+    odom_frame_id: odom
+    publish_tf: true
+    database_path: ~/carbot_ws/maps/rtabmap_d455_mid360.db
+
+    # Input subscriptions
+    subscribe_rgb: true
+    subscribe_depth: true
+    subscribe_rgbd: false
+    subscribe_stereo: false
+    subscribe_scan: false
+    subscribe_scan_cloud: true
+    subscribe_scan_descriptor: false
+    subscribe_user_data: false
+    subscribe_odom_info: false
+
+    # Synchronization / timing
+    approx_sync: true
+    topic_queue_size: 100
+    sync_queue_size: 30
+    wait_for_transform_duration: 0.2
+    odom_sensor_sync: false
+    scan_cloud_max_points: 0
+
+    # ===== RTAB-Map core params =====
+    # Mapping mode
+    "Mem/IncrementalMemory": "true"
+    "Mem/InitWMWithAllNodes": "false"
+    "Mem/UseOdomGravity": "false"
+    "Mem/STMSize": "30"
+    "Mem/NotLinkedNodesKept": "false"
+
+    # Keep RGB-D projection valid for colored cloud export
+    "Rtabmap/ImagesAlreadyRectified": "true"
+    "Rtabmap/DetectionRate": "4.0"
+
+    # Add a node only after modest motion -> avoids huge DB but stays dense enough
+    "RGBD/LinearUpdate": "0.05"
+    "RGBD/AngularUpdate": "0.02"
+
+
+    # Localization-only later:
+    # "Mem/IncrementalMemory": "false"
+    # "Mem/InitWMWithAllNodes": "true"
+
+    # External odometry from FAST-LIO, loop closure refinement with LiDAR geometry
+    "Reg/Strategy": "1"                  # 1 = ICP
+    "Icp/PointToPlane": "true"
+    "Icp/VoxelSize": "0.10"
+    "Icp/MaxCorrespondenceDistance": "0.20"
+    "Icp/MaxTranslation": "3.0"
+    "Icp/CorrespondenceRatio": "0.10"
+
+    # We care about 3D cloud / textured export more than occupancy grid topics.
+    # Keep these on only if you also want 3D occupancy / OctoMap generation.
+    "RGBD/CreateOccupancyGrid": "false"
+    "Grid/Sensor": "2"                  # 0=laser, 1=depth, 2=both
+    "Grid/3D": "true"
+    "Grid/RangeMin": "0.20"
+    "Grid/RangeMax": "15.0"
+    "Grid/CellSize": "0.10"
+    "Grid/NormalsSegmentation": "false"  # safer for unorganized Livox clouds
